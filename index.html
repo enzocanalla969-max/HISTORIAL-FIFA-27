@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historial FIFA 27</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: #0b1d2e; color: #fff; margin: 0; padding: 16px; }
+  h1 { text-align: center; margin: 8px 0 4px; }
+  #estado { text-align: center; font-size: 12px; color: #a0aec0; margin-bottom: 12px; }
+  h2 { margin-top: 0; color: #4fd1c5; }
+  .card { background: #13304a; border-radius: 12px; padding: 16px; margin: 0 auto 16px; max-width: 700px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+  select, input { padding: 10px; border-radius: 8px; border: none; font-size: 16px; width: 100%; }
+  button { padding: 12px; border: none; border-radius: 8px; background: #4fd1c5; color: #0b1d2e; font-weight: bold; font-size: 16px; cursor: pointer; width: 100%; }
+  button.small { width: auto; padding: 4px 10px; background: #e53e3e; color: #fff; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 6px; text-align: center; border-bottom: 1px solid #2c5282; }
+  th:first-child, td:first-child { text-align: left; }
+  .match { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #2c5282; gap: 8px; }
+  .match .info { flex: 1; }
+  .score { font-size: 20px; font-weight: bold; color: #f6e05e; }
+  .date { font-size: 12px; color: #a0aec0; }
+  .winner { color: #68d391; font-weight: bold; }
+  .h2h { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #2c5282; }
+  .chip { display: inline-block; background: #2c5282; border-radius: 16px; padding: 4px 12px; margin: 2px; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>⚽ Historial FIFA 27</h1>
+<div id="estado">Conectando...</div>
+
+<div class="card">
+  <h2>Jugadores</h2>
+  <div id="listaJugadores"></div>
+  <div class="row" style="margin-top:8px">
+    <input id="nuevoJugador" placeholder="Nombre del nuevo jugador">
+    <button onclick="agregarJugador()">Agregar jugador</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Nuevo partido</h2>
+  <div class="row">
+    <select id="p1"></select>
+    <input id="t1" placeholder="Equipo (ej: PSG)">
+  </div>
+  <div class="row">
+    <select id="p2"></select>
+    <input id="t2" placeholder="Equipo (ej: Barça)">
+  </div>
+  <div class="row">
+    <input id="g1" type="number" min="0" placeholder="Goles jugador 1">
+    <input id="g2" type="number" min="0" placeholder="Goles jugador 2">
+  </div>
+  <button onclick="agregarPartido()">Guardar partido</button>
+</div>
+
+<div class="card">
+  <h2>Tabla de posiciones</h2>
+  <table id="tabla"></table>
+</div>
+
+<div class="card">
+  <h2>Enfrentamientos directos</h2>
+  <div id="h2h"></div>
+</div>
+
+<div class="card">
+  <h2>Historial</h2>
+  <div id="historial"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBf02ZK2-GvJHl7EaV50DuV8UMC8-x2v5g",
+  authDomain: "historial-fifa-27.firebaseapp.com",
+  projectId: "historial-fifa-27",
+  storageBucket: "historial-fifa-27.firebasestorage.app",
+  messagingSenderId: "93182377204",
+  appId: "1:93182377204:web:7773c7ffbae54207daf2a1"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let jugadores = [];
+let partidos = [];
+
+const estado = document.getElementById('estado');
+
+onSnapshot(collection(db, 'jugadores'), (snap) => {
+  jugadores = snap.docs.map(d => d.data().nombre).sort((a, b) => a.localeCompare(b));
+  estado.textContent = '🟢 En línea, datos compartidos en tiempo real';
+  render();
+}, (err) => {
+  estado.textContent = '🔴 Error de conexión: revisá tu firebaseConfig y las reglas';
+  console.error(err);
+});
+
+onSnapshot(query(collection(db, 'partidos'), orderBy('fecha', 'desc')), (snap) => {
+  partidos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  render();
+}, (err) => console.error(err));
+
+window.agregarJugador = async () => {
+  const input = document.getElementById('nuevoJugador');
+  const nombre = input.value.trim();
+  if (!nombre) return;
+  if (jugadores.some(j => j.toLowerCase() === nombre.toLowerCase())) return alert('Ese jugador ya existe');
+  await setDoc(doc(db, 'jugadores', nombre.toLowerCase()), { nombre });
+  input.value = '';
+};
+
+window.agregarPartido = async () => {
+  const p1 = document.getElementById('p1').value;
+  const p2 = document.getElementById('p2').value;
+  const t1 = document.getElementById('t1').value.trim();
+  const t2 = document.getElementById('t2').value.trim();
+  const g1 = parseInt(document.getElementById('g1').value);
+  const g2 = parseInt(document.getElementById('g2').value);
+  if (!p1 || !p2) return alert('Agregá al menos dos jugadores primero');
+  if (p1 === p2) return alert('Elegí dos jugadores distintos');
+  if (!t1 || !t2) return alert('Poné el equipo de cada uno');
+  if (isNaN(g1) || isNaN(g2)) return alert('Poné los goles de los dos');
+  await addDoc(collection(db, 'partidos'), { fecha: new Date().toISOString(), p1, t1, g1, p2, t2, g2 });
+  ['t1', 't2', 'g1', 'g2'].forEach(id => document.getElementById(id).value = '');
+};
+
+window.borrar = async (id) => {
+  if (confirm('¿Borrar este partido?')) await deleteDoc(doc(db, 'partidos', id));
+};
+
+function llenarSelects() {
+  ['p1', 'p2'].forEach((id, i) => {
+    const s = document.getElementById(id);
+    const actual = s.value;
+    s.innerHTML = jugadores.map(j => `<option>${j}</option>`).join('');
+    if (actual && jugadores.includes(actual)) s.value = actual;
+    else if (jugadores[i]) s.selectedIndex = i;
+  });
+}
+
+function render() {
+  document.getElementById('listaJugadores').innerHTML =
+    jugadores.length ? jugadores.map(j => `<span class="chip">${j}</span>`).join('') : '<span class="date">Agregá el primer jugador</span>';
+  llenarSelects();
+
+  // Tabla de posiciones
+  const st = {};
+  jugadores.forEach(j => st[j] = { pj: 0, g: 0, e: 0, p: 0, gf: 0, gc: 0, pts: 0 });
+  partidos.forEach(m => {
+    if (!st[m.p1] || !st[m.p2]) return;
+    const a = st[m.p1], b = st[m.p2];
+    a.pj++; b.pj++;
+    a.gf += m.g1; a.gc += m.g2;
+    b.gf += m.g2; b.gc += m.g1;
+    if (m.g1 > m.g2) { a.g++; a.pts += 3; b.p++; }
+    else if (m.g2 > m.g1) { b.g++; b.pts += 3; a.p++; }
+    else { a.e++; b.e++; a.pts++; b.pts++; }
+  });
+  const orden = jugadores.slice().sort((x, y) =>
+    st[y].pts - st[x].pts || (st[y].gf - st[y].gc) - (st[x].gf - st[x].gc) || st[y].gf - st[x].gf);
+  document.getElementById('tabla').innerHTML =
+    '<tr><th>Jugador</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>Pts</th></tr>' +
+    orden.map(j => `<tr><td>${j}</td><td>${st[j].pj}</td><td>${st[j].g}</td><td>${st[j].e}</td><td>${st[j].p}</td><td>${st[j].gf}</td><td>${st[j].gc}</td><td><b>${st[j].pts}</b></td></tr>`).join('');
+
+  // Enfrentamientos directos (todos los pares)
+  const pares = [];
+  for (let i = 0; i < jugadores.length; i++)
+    for (let k = i + 1; k < jugadores.length; k++) pares.push([jugadores[i], jugadores[k]]);
+  document.getElementById('h2h').innerHTML = pares.map(([a, b]) => {
+    let wa = 0, wb = 0, d = 0;
+    partidos.forEach(m => {
+      if (!((m.p1 === a && m.p2 === b) || (m.p1 === b && m.p2 === a))) return;
+      const ga = m.p1 === a ? m.g1 : m.g2;
+      const gb = m.p1 === a ? m.g2 : m.g1;
+      if (ga > gb) wa++; else if (gb > ga) wb++; else d++;
+    });
+    return `<div class="h2h"><span>${a} vs ${b}</span><span>${wa} - ${d} - ${wb}</span></div>`;
+  }).join('') + '<div class="date" style="margin-top:6px">Formato: victorias del primero - empates - victorias del segundo</div>';
+
+  // Historial
+  const h = document.getElementById('historial');
+  if (!partidos.length) { h.innerHTML = '<p class="date">Todavía no hay partidos cargados.</p>'; return; }
+  h.innerHTML = partidos.map(m => {
+    const f = new Date(m.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const w1 = m.g1 > m.g2 ? 'winner' : '', w2 = m.g2 > m.g1 ? 'winner' : '';
+    return `<div class="match">
+      <div class="info">
+        <div class="date">${f}</div>
+        <div><span class="${w1}">${m.p1} (${m.t1})</span> vs <span class="${w2}">${m.p2} (${m.t2})</span></div>
+      </div>
+      <div class="score">${m.g1} - ${m.g2}</div>
+      <button class="small" onclick="borrar('${m.id}')">X</button>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
